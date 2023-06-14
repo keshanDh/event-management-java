@@ -12,20 +12,18 @@ public class Database {
     private String username = "root";
     private String password = "root";
 
-    private String findStudentByName = "SELECT student_id, pro FROM STUDENT WHERE LOWER(student_name) like ?";
+    private String findStudentByName = "SELECT student_id, student_program_id FROM STUDENT WHERE LOWER(student_name) like ?";
     private String findStudentNameById = "SELECT student_name FROM STUDENT WHERE student_id = ?";
     private String insertEventParticipant = "INSERT INTO PARTICIPANT (student_id, guest_name, program_id) VALUES (?, ?, ?)";
     private String searchParticipant = "SELECT * FROM PARTICIPANT WHERE LOWER(guest_name) like ?";
     private String studentAlreadyRegistered = "SELECT * FROM PARTICIPANT WHERE student_id = ?";
-    private String getNumOfGuests = "SELECT COUNT(*) FROM PARTICIPANT WHERE student_id = ?";
     private String deleteEventByStudentId = "DELETE FROM PARTICIPANT WHERE student_id = ?";
     private String getAllStudents = "SELECT student_name FROM STUDENT";
     private String getAllStaff = "SELECT staff_name FROM STAFF";
     private String getAllProgramResponsibles = "SELECT pr_name FROM PROGRAM_RESPONSIBLES";
     private String getAllGuests = "SELECT DISTINCT guest_name FROM PARTICIPANT";
     private String getAllPrograms = "SELECT * FROM program";
-    private String getStudentsByProgramFromEvent = "SELECT student_name FROM program where program_id = ?";
-    private String searchStudentByNameFromEvent = "SELECT student_name FROM program where LOWER(student_name) like ?";
+    private String getStudentsByProgramFromEvent = "SELECT DISTINCT student_id FROM PARTICIPANT where program_id = ?";
 
     private Connection getEventDBConnection() {
         Connection connection = null;
@@ -59,7 +57,7 @@ public class Database {
             resultSet = statement.executeQuery();
             if (resultSet.next()) {
                 student.put("student_id", resultSet.getInt("student_id"));
-                student.put("program_id", resultSet.getInt("program_id"));
+                student.put("program_id", resultSet.getInt("student_program_id"));
             }
         } catch (SQLException e) {
             System.out.println("FindStudentIdByName failed! error: " + e.getMessage());
@@ -96,12 +94,13 @@ public class Database {
             statement = connection.prepareStatement(searchParticipant);
             statement.setString(1, guestName);
             resultSet = statement.executeQuery();
-            while (resultSet.next()) {
+            if (resultSet.next()) {
                 result.put("student_id", resultSet.getInt("student_id"));
                 result.put("guest_name", resultSet.getString("guest_name"));
+                result.put("program_id", resultSet.getString("program_id"));
             }
             if (!result.isEmpty()) {
-                getStudentNameFromId(result);
+                getStudentNameById(result);
             }
         } catch (SQLException e) {
             System.out.println("SearchParticipant failed! error: " + e.getMessage());
@@ -111,7 +110,7 @@ public class Database {
         return result;
     }
     
-    private void getStudentNameFromId(Map<String, Object> result) {
+    private void getStudentNameById(Map<String, Object> result) {
         Connection connection = null;
         PreparedStatement statement = null;
         ResultSet resultSet = null;
@@ -145,27 +144,6 @@ public class Database {
             }
         } catch (SQLException e) {
             System.out.println("CheckStudentAleadyRegistered failed! error: " + e.getMessage());
-        } finally {
-            close(connection, statement, resultSet);
-        }
-        return result;
-    }
-    
-    public int getNumOfGuests(int studentId) {
-        int result = 0;
-        Connection connection = null;
-        PreparedStatement statement = null;
-        ResultSet resultSet = null;
-        try {
-            connection = getEventDBConnection();
-            statement = connection.prepareStatement(getNumOfGuests);
-            statement.setInt(1, studentId);
-            resultSet = statement.executeQuery();
-            if (resultSet.next()) {
-                result = resultSet.getInt(1);
-            }
-        } catch (SQLException e) {
-            System.out.println("GetNumOfGuests failed! error: " + e.getMessage());
         } finally {
             close(connection, statement, resultSet);
         }
@@ -226,7 +204,7 @@ public class Database {
             statement = connection.prepareStatement(getAllStaff);
             resultSet = statement.executeQuery();
             while (resultSet.next()) {
-                participants.add(resultSet.getString("student_name"));
+                participants.add(resultSet.getString("staff_name"));
             }
         } catch (SQLException e) {
             System.out.println("GetAllStaff failed! error: " + e.getMessage());
@@ -246,7 +224,7 @@ public class Database {
             statement = connection.prepareStatement(getAllProgramResponsibles);
             resultSet = statement.executeQuery();
             while (resultSet.next()) {
-                participants.add(resultSet.getString("student_name"));
+                participants.add(resultSet.getString("pr_name"));
             }
         } catch (SQLException e) {
             System.out.println("GetAllProgramResponsibles failed! error: " + e.getMessage());
@@ -266,7 +244,7 @@ public class Database {
             statement = connection.prepareStatement(getAllGuests);
             resultSet = statement.executeQuery();
             while (resultSet.next()) {
-                participants.add(resultSet.getString("student_name"));
+                participants.add(resultSet.getString("guest_name"));
             }
         } catch (SQLException e) {
             System.out.println("GetAllGuestParticipants failed! error: " + e.getMessage());
@@ -302,12 +280,15 @@ public class Database {
         ResultSet resultSet = null;
         ArrayList<String> students = new ArrayList<>();
         try {
-            connection = getUniversityDBConnection();
+            connection = getEventDBConnection();
             statement = connection.prepareStatement(getStudentsByProgramFromEvent);
             statement.setInt(1, programId);
             resultSet = statement.executeQuery();
             while (resultSet.next()) {
-                students.add(resultSet.getString("student_name"));
+                Map<String, Object> student = new HashMap<>();
+                student.put("student_id", resultSet.getInt("student_id"));
+                getStudentNameById(student);
+                students.add((String) student.get("student_name"));
             }
         } catch (SQLException e) {
             System.out.println("GetStudentByProgram failed! error: " + e.getMessage());
@@ -315,27 +296,6 @@ public class Database {
             close(connection, statement, resultSet);
         }
         return students;
-    }
-    
-    public String searchStudentByNameFromEvent(String studentName) {
-        Connection connection = null;
-        PreparedStatement statement = null;
-        ResultSet resultSet = null;
-        String result = "";
-        try {
-            connection = getUniversityDBConnection();
-            statement = connection.prepareStatement(searchStudentByNameFromEvent);
-            statement.setString(1, studentName);
-            resultSet = statement.executeQuery();
-            if (resultSet.next()) {
-                result = resultSet.getString("student_name");
-            }
-        } catch (SQLException e) {
-            System.out.println("SearchStudentByNameFromEvent failed! error: " + e.getMessage());
-        } finally {
-            close(connection, statement, resultSet);
-        }
-        return result;
     }
 
     private void close(Connection connection, PreparedStatement statement, ResultSet resultSet) {
